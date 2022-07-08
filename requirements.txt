@@ -1,0 +1,8 @@
+pandas
+seaborn
+sklearn
+transformers
+jupyter
+datasets
+sklearn-contrib-lightning
+tqdm
