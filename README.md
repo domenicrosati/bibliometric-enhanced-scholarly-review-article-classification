@@ -45,6 +45,27 @@ $ aws cp s3://research-data-dumps/classifying_review_articles_by_references/ ./d
 Each of the experiments are Jupyter Notebooks.
 Note that the Language Model notebooks require using a GPU which are freely available on services such as colab, kaggle, sagemaker, or paperspace.
 
+## BiblioEncoder
+
+BiblioEncoder is an approach to incorporating bibliometric features with language models by putting an encoder on a set of bibliometric features that projects the features in the same space as the language model.
+
+I.e.
+```
+ self.encoder = nn.Sequential(
+            nn.Linear(context_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size)
+)
+self.classifier = nn.Linear(hidden_size * 2, self.num_labels)
+```
+
+Where the classifier will receive the language model embeddings and bibliographic embeddings.
+See the architectures in ./experiments as well as the finetune_with context notebooks for more details.
+
 ### Experiments
 
 **Characteriation**

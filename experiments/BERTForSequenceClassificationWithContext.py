@@ -3,14 +3,12 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 from transformers.modeling_outputs import SequenceClassifierOutput
-from transformers.models.deberta_v2.modeling_deberta_v2 import (
-    DebertaV2Model,
-    ContextPooler,
-    StableDropout,
-    DebertaV2PreTrainedModel
+from transformers.models.bert.modeling_bert import (
+    BertModel,
+    BertPreTrainedModel
 )
 
-class DebertaV2ForSequenceClassificationWithContextEncoder(DebertaV2PreTrainedModel):
+class BertForSequenceClassificationWithContextEncoder(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -18,10 +16,13 @@ class DebertaV2ForSequenceClassificationWithContextEncoder(DebertaV2PreTrainedMo
 
         self.num_labels = num_labels
 
-        self.deberta = DebertaV2Model(config)
-        self.pooler = ContextPooler(config)
+        self.bert = BertModel(config)
+        classifier_dropout = (
+                config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         context_size = getattr(config, "context_size", 17)
-        hidden_size = getattr(config, "hidden_size", self.pooler.output_dim)
+        hidden_size = getattr(config, "hidden_size", config.hidden_size)
 
         self.encoder = nn.Sequential(
             nn.Linear(context_size, hidden_size),
@@ -34,18 +35,8 @@ class DebertaV2ForSequenceClassificationWithContextEncoder(DebertaV2PreTrainedMo
         )
         self.classifier = nn.Linear(hidden_size * 2, self.num_labels)
 
-        drop_out = getattr(config, "cls_dropout", None)
-        drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
-        self.dropout = StableDropout(drop_out)
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.deberta.get_input_embeddings()
-
-    def set_input_embeddings(self, new_embeddings):
-        self.deberta.set_input_embeddings(new_embeddings)
 
     def forward(
         self,
@@ -54,6 +45,7 @@ class DebertaV2ForSequenceClassificationWithContextEncoder(DebertaV2PreTrainedMo
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -62,19 +54,20 @@ class DebertaV2ForSequenceClassificationWithContextEncoder(DebertaV2PreTrainedMo
     ) -> Union[Tuple, SequenceClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.deberta(
+        outputs = self.bert(
             input_ids,
-            token_type_ids=token_type_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        encoder_layer = outputs[0]
-        pooled_output = self.pooler(encoder_layer)
+        pooled_output = outputs[1]
+
         pooled_output = self.dropout(pooled_output)
         ctx_emb = self.encoder(context)
         x = torch.cat([pooled_output, ctx_emb], dim=1)
